@@ -1,3 +1,6 @@
 *.log
 datasets/
-CogDL/
+OurCogDL/
+checkpoints/
+.old_logs/
+embeddings/

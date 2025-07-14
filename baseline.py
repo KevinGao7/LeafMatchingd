@@ -1,0 +1,37 @@
+from cogdl import experiment
+
+# basic usage
+# experiment(dataset="cora", model="prone", dw="network_embedding_dw", mw="network_embedding_mw", training_percents=[0.5], n_trials=100)
+# experiment(dataset="cora", model="sdne", dw="embedding_link_prediction_dw", mw="embedding_link_prediction_mw", n_trials=100)
+# experiment(dataset="citeseer", model="node2vec", dw="embedding_link_prediction_dw", mw="embedding_link_prediction_mw", n_trials=100)
+# experiment(dataset="pubmed", model="node2vec", dw="embedding_link_prediction_dw", mw="embedding_link_prediction_mw", n_trials=100)
+# experiment(dataset="ogbl-ppa", model="node2vec", dw="embedding_link_prediction_dw", mw="embedding_link_prediction_mw", n_trials=100)
+# experiment(dataset="ogbl-citation2", model="node2vec", dw="embedding_link_prediction_dw", mw="embedding_link_prediction_mw", n_trials=100)
+# experiment(dataset="cora", model="vgae", dw="gnn_link_prediction_dw", mw="gnn_link_prediction_mw", n_trials=100)
+# experiment(dataset="cora", model="gae", dw="network_embedding_dw", mw="network_embedding_mw", training_percents=[0.5], n_trials=100)
+
+# experiment(dataset="cora", model="deepwalk", dw="embedding_link_prediction_dw", mw="embedding_link_prediction_mw", n_trials=100)
+# experiment(dataset="cora", model="line", dw="embedding_link_prediction_dw", mw="embedding_link_prediction_mw", n_trials=100)
+experiment(dataset="cora", model="node2vec", dw="embedding_link_prediction_dw", mw="embedding_link_prediction_mw", n_trials=100)
+# experiment(dataset="citeseer", model="prone", dw="embedding_link_prediction_dw", mw="embedding_link_prediction_mw", n_trials=100)
+# experiment(dataset="citeseer", model="netmf", dw="embedding_link_prediction_dw", mw="embedding_link_prediction_mw", n_trials=100)
+# experiment(dataset="citeseer", model="netsmf", dw="embedding_link_prediction_dw", mw="embedding_link_prediction_mw", n_trials=100)
+# experiment(dataset="citeseer", model="sdne", dw="embedding_link_prediction_dw", mw="embedding_link_prediction_mw", n_trials=100)
+# experiment(dataset="citeseer", model="spectral", dw="embedding_link_prediction_dw", mw="embedding_link_prediction_mw", n_trials=100)
+# # experiment(dataset="cora", model="dngr", dw="embedding_link_prediction_dw", mw="embedding_link_prediction_mw", n_trials=100)
+
+# #bug
+# # experiment(dataset="cora", model="grarep", dw="embedding_link_prediction_dw", mw="embedding_link_prediction_mw", n_trials=100)
+# experiment(dataset="cora", model="hope", dw="embedding_link_prediction_dw", mw="embedding_link_prediction_mw", n_trials=100)
+# # experiment(dataset="cora", model="autoprone", dw="embedding_link_prediction_dw", mw="embedding_link_prediction_mw", n_trials=100)
+# experiment(dataset="cora", model="gae", dw="gnn_link_prediction_dw", mw="gnn_link_prediction_mw", n_trials=100)
+# experiment(dataset="cora", model="vgae", dw="gnn_link_prediction_dw", mw="gnn_link_prediction_mw", n_trials=100)
+# # experiment(dataset="cora", model="chebyshev", dw="embedding_link_prediction_dw", mw="embedding_link_prediction_mw", n_trials=100)
+# experiment(dataset="cora", model="gcn", dw="gnn_link_prediction_dw", mw="gnn_link_prediction_mw", n_trials=100)
+# experiment(dataset="cora", model="gat", dw="gnn_link_prediction_dw", mw="gnn_link_prediction_mw", n_trials=100)
+# experiment(dataset="cora", model="graphsage", dw="gnn_link_prediction_dw", mw="gnn_link_prediction_mw", n_trials=100)
+# # experiment(dataset="cora", model="appnp", dw="gnn_link_prediction_dw", mw="gnn_link_prediction_mw", n_trials=100)
+# experiment(dataset="cora", model="dgi", dw="gnn_link_prediction_dw", mw="gnn_link_prediction_mw", n_trials=100)
+# experiment(dataset="cora", model="gcnii", dw="gnn_link_prediction_dw", mw="gnn_link_prediction_mw", n_trials=100)
+# experiment(dataset="cora", model="mvgrl", dw="gnn_link_prediction_dw", mw="gnn_link_prediction_mw", n_trials=100)
+# experiment(dataset="cora", model="grand", dw="gnn_link_prediction_dw", mw="gnn_link_prediction_mw", n_trials=100)
