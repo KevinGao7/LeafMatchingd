@@ -43,6 +43,25 @@ def eval_auc(prob_pos: torch.Tensor, prob_neg: torch.Tensor):
 
     return rocauc, ap, f1
 
+def eval_auc_ap_f1(prob_pos: torch.Tensor, prob_neg: torch.Tensor): # the inputs should be sorted ascendingly
+    prob_pos_numpy = prob_pos.detach().cpu().numpy()
+    prob_neg_numpy = prob_neg.detach().cpu().numpy()
+
+    prob_all = np.concatenate([prob_pos_numpy, prob_neg_numpy])
+    true_all = np.concatenate([np.ones(len(prob_pos_numpy)), np.zeros(len(prob_neg_numpy))]).astype(np.int32)
+
+    rocauc = roc_auc_score(true_all, prob_all)
+    ap = average_precision_score(true_all, prob_all) # also PRAUC
+
+    sorted_prob = deepcopy(prob_all)
+    sorted_prob.sort()
+    threshold = sorted_prob[-len(prob_pos_numpy)]
+    pred_all = (prob_all >= threshold).astype(np.int32)
+
+    f1 = f1_score(true_all, pred_all)
+
+    return rocauc, ap, f1
+
 from typing import Tuple, List, Dict
 
 class NodeMRREvaluator:
