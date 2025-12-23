@@ -275,7 +275,7 @@ if __name__ == "__main__":
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--epoch", type=int, default=50)
     parser.add_argument("--split_ratio", type=float, default=0.9)
-    parser.add_argument("--alpha", type=float, default=8)
+    parser.add_argument("--alpha", type=float, default=3)
     parser.add_argument("--h", type=int, default=12)
     parser.add_argument("--gamma", type=float, default=3)
     parser.add_argument("--tp", type=int, default=16)
@@ -320,6 +320,8 @@ if __name__ == "__main__":
     elif dataset_name.startswith("ER"):
         data_path = f'./datasets/synthetic'  
         direct_load = True 
+    elif "icews18" in dataset_name:
+        data_path = f'./datasets/icews18/split_{dataset_name.split("_")[-1]}/'
     else:
         data_path = f'./datasets/{dataset_name}/split/'
         

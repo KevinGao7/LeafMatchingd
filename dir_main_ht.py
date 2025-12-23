@@ -25,7 +25,7 @@ class MyDataset(Dataset):
         return sta_ind.clone().detach().to(dtype=torch.int64).cuda() 
 class CritiGraph(torch.nn.Module):
     def __init__(self, h, tp, c, eps, neg, gamma, alpha, epoch, batch_size, pos_ratio, 
-                 chunks, convergence, eval_step):
+                 chunks, convergence, eval_step, oi):
         super().__init__() 
         self.h = h
         self.tp = tp
@@ -44,6 +44,7 @@ class CritiGraph(torch.nn.Module):
         self.chunks = chunks
         self.convergence = convergence
         self.eval_step = eval_step
+        self.oi = oi
     def generate_distance_lookup_table(self):
         xor_results = torch.arange(self.n, dtype=torch.int64, device=device)
         return torch.where(xor_results == 0, 
@@ -73,15 +74,23 @@ class CritiGraph(torch.nn.Module):
             return p_21
         elif key == 2:
             return 1-p_12
+            # return (1-p_12)*(1-p_21)
         elif key == 3:
             return 1-p_21
+            # return (1-p_21)*(1-p_12)
     def p(self, dis, ig1, ig2):       
-        deg1, deg2 = self.out_degree[ig1], self.in_degree[ig2]
+        if self.oi:
+            deg1, deg2 = self.out_degree[ig1], self.in_degree[ig2]
+        else:
+            deg1, deg2 = self.degree[ig1], self.degree[ig2]
         ap = (deg1+1)*(deg2+1)
         aa = (dis+self.eps)/torch.log(ap)[:,:,None,None]
         return 1/(1+aa**self.gamma/self.alpha)
     def p_test(self, dis, ig1, ig2):
-        deg1, deg2 = self.out_degree[ig1], self.in_degree[ig2]   
+        if self.oi:
+            deg1, deg2 = self.out_degree[ig1], self.in_degree[ig2]   
+        else:
+            deg1, deg2 = self.degree[ig1], self.degree[ig2]   
         ap = (deg1+1)*(deg2+1)
         aa = (dis+self.eps)/torch.log(ap)
         return 1/(1+aa**self.gamma/self.alpha)
@@ -137,6 +146,7 @@ class CritiGraph(torch.nn.Module):
             for n, nbs in neighbor_dict[j].items():
                 neighbor_tensor[j][n, :len(nbs)] = nbs
         return neighbor_tensor
+
     def neighbor_batch(self, sta_ind, epoch):
         bs = sta_ind.size(0)
         batch_max_degree = self.degree[sta_ind].max().item()
@@ -291,7 +301,7 @@ if __name__ == "__main__":
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--epoch", type=int, default=50)
     parser.add_argument("--split_ratio", type=float, default=0.9)
-    parser.add_argument("--alpha", type=float, default=10)
+    parser.add_argument("--alpha", type=float, default=3)
     parser.add_argument("--h", type=int, default=12)
     parser.add_argument("--gamma", type=float, default=3)
     parser.add_argument("--tp", type=int, default=16)
@@ -302,6 +312,7 @@ if __name__ == "__main__":
     parser.add_argument("--chunks", type=int, default=1)
     parser.add_argument("--convergence", type=float, default=0.8)
     parser.add_argument("--eval_step", type=int, default=1)
+    parser.add_argument("--oi", type=int, default=0)
     
     # 3. Parse the command-line arguments
     args = parser.parse_args()
@@ -323,6 +334,10 @@ if __name__ == "__main__":
     convergence = args.convergence
     eval_step = args.eval_step
     direct_load = False
+    oi= args.oi
+    assert oi == 0 or oi == 1, "oi should be 0 or 1"
+    
+     # Set random seed
     
     set_random_seed(seed)
     print(f"dataset_name={dataset_name}, seed={seed}, epoch={epoch}, split_ratio={split_ratio}, alpha={alpha}, h={h}, gamma={gamma}, tp={tp}, c={c}, neg={neg}, batch_size={batch_size}, pos_ratio={pos_ratio}, chunks={chunks}, convergence={convergence}, eval_step={eval_step}")
@@ -336,6 +351,8 @@ if __name__ == "__main__":
     elif dataset_name.startswith("ER"):
         data_path = f'./datasets/synthetic'  
         direct_load = True 
+    elif "icews18" in dataset_name:
+        data_path = f'./datasets/icews18/split_{dataset_name.split("_")[-1]}/'
     else:
         data_path = f'./datasets/{dataset_name}/split/'
         
@@ -349,7 +366,8 @@ if __name__ == "__main__":
     # 6. Train and Test the model
     model = CritiGraph(h=h, tp=tp, c=c, eps=1e-5, neg=neg, gamma=gamma, 
                         alpha=alpha, epoch=epoch, batch_size=batch_size, pos_ratio=pos_ratio,
-                        chunks=chunks, convergence=convergence, eval_step=eval_step)
+                        chunks=chunks, convergence=convergence, eval_step=eval_step,
+                        oi=oi)
     model(train_data, test_data[0], test_data[1])
     
 

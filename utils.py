@@ -43,4 +43,78 @@ def eval_auc(prob_pos: torch.Tensor, prob_neg: torch.Tensor):
 
     return rocauc, ap, f1
 
+from typing import Tuple, List, Dict
+
+class NodeMRREvaluator:
+    r"""
+    Node-level MRR evaluator — simplified dynamic-negative version
+    ---------------------------------------------------------------
+    Parameters
+    ----------
+    num_nodes  : int      — number of nodes in graph
+    block_size : int      — number of positive edges per evaluation block
+    neg_ratio  : int      — number of negatives per positive edge
+    """
+    def __init__(self):
+        self.run = False
+
+    def activate(self):
+        self.run = True
+        print("Activated NodeMRREvaluator.")
+
+    def init(self, num_nodes: int, block_size: int = 16384, neg_ratio: int = 100):
+        self.N = num_nodes
+        self.block_size = block_size
+        self.neg_ratio = neg_ratio
+
+    @torch.no_grad()
+    def evaluate(
+        self,
+        test_pos: torch.Tensor,        # [E,2] or [2,E]
+        test_sco: torch.Tensor,        # [E]
+        score_fn                      # callable(u,v)->score
+    ) -> float:
+        if test_pos.shape[0] == 2:
+            test_pos = test_pos.t() # [E,2]
+        E = test_pos.size(0)
+        device = test_pos.device
+
+        total_rr_opt, total_rr_pess = 0.0, 0.0
+        count_opt, count_pess = 0, 0
+
+        for i in range(0, E, self.block_size):
+            pos_block = test_pos[i:i+self.block_size]
+            pos_scores = test_sco[i:i+self.block_size]
+            B = pos_block.size(0)
+            u = pos_block[:, 0] # [B]
+            v_pos = pos_block[:, 1]
+
+            # --- negative samples ---
+            v_neg = torch.randint(low=0, high=self.N, size=(B * self.neg_ratio, ), device=device)
+            neg_scores = score_fn(
+                torch.stack(
+                    [u.unsqueeze(1).repeat(1, self.neg_ratio).reshape(-1), 
+                    v_neg]
+                , dim=1) # [B * neg_ratio, 2]
+            ).reshape(B, self.neg_ratio)  # [B * neg_ratio] -> [B, neg_ratio]
+            neg_sorted = torch.sort(neg_scores, dim=1).values  # ascending
+
+            # --- searchsorted for rank opt ---
+            inds_opt = torch.searchsorted(neg_sorted, pos_scores.unsqueeze(1), right=True)
+            rank = (self.neg_ratio - inds_opt + 1).to(torch.float32)
+            rr = 1.0 / rank
+            total_rr_opt += rr.sum().item()
+            count_opt += B
+
+            # --- searchsorted for rank pess ---
+            inds_pess = torch.searchsorted(neg_sorted, pos_scores.unsqueeze(1), right=False)
+            rank = (self.neg_ratio - inds_pess + 1).to(torch.float32)
+            rr = 1.0 / rank
+            total_rr_pess += rr.sum().item()
+            count_pess += B
+
+        mrr_opt = total_rr_opt / count_opt
+        mrr_pess = total_rr_pess / count_pess
+        return mrr_opt, mrr_pess
     
+MRR_NODE = NodeMRREvaluator()

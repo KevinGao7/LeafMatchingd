@@ -305,7 +305,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     
     # 2. Add arguments to the parser
-    parser.add_argument("--dataset", type=str, default='cora_ml')
+    parser.add_argument("--dataset", type=str, default='pubmed')
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--epoch", type=int, default=50)
     parser.add_argument("--split_ratio", type=float, default=0.1)

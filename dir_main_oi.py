@@ -15,6 +15,7 @@ import argparse
 import sys
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
+
 # >>> Dataset and Model <<< #
 class MyDataset(Dataset):
     def __init__(self, indices):
@@ -145,9 +146,10 @@ class CritiGraph(torch.nn.Module):
         if epoch <= self.convergence * self.epoch:
             random_probs = torch.rand(bs, device=device) # (bs, )
             choosing_mask = random_probs > 0.2 # (bs, )
-            batch_lengths = [torch.where(choosing_mask, batch_lengths[j], 1) for j in range(3)]
+            
             
             one_random_neighbor = [(torch.rand(bs, device=device) * batch_lengths[j]).floor().long() for j in range(3)] # (bs, )
+            batch_lengths = [torch.where(choosing_mask, batch_lengths[j], 1) for j in range(3)]
             random_neighbor_mask = [torch.zeros((bs, batch_max_degree), dtype=torch.bool, device=device) for _ in range(3)] # (bs, max_degree)
             for j in range(3):
                 random_neighbor_mask[j][torch.arange(bs), one_random_neighbor[j]] = True # (bs, max_degree)
@@ -184,6 +186,7 @@ class CritiGraph(torch.nn.Module):
         self.in_degree = torch.IntTensor([self.G.in_degree(n) for n in self.G.nodes()]).cuda().to(torch.int64)
         self.degree = torch.IntTensor([self.G.degree(n) for n in self.G.nodes()]).cuda().to(torch.int64)
         self.max_degree = self.degree.max()
+        print("max_degree", self.max_degree)
         self.neighbor_tensor = self.get_neighbor()
         self.locations = torch.randint(0, self.n, (self.num_nodes, self.tp), dtype=torch.int64, device=device)
         self.li = torch.arange(self.num_nodes, dtype=torch.int64, device=device)[self.degree>0]
@@ -244,7 +247,11 @@ class CritiGraph(torch.nn.Module):
         hit100 = eval_hits(sorted_pos, sorted_neg, 100)
         self.hits50_max = [hit50, epoch]
         self.hits100_max = [hit100, epoch]
-        mrr1, mrr2 = eval_mrr(sorted_pos, sorted_neg)
+        if MRR.get('evaluator') is not None:
+            mrr_evaluator = MRR['evaluator']
+            mrr1, mrr2 = mrr_evaluator.evaluate(pos, neg)
+        else:
+            mrr1, mrr2 = eval_mrr(sorted_pos, sorted_neg)
         mrr = (mrr1 + mrr2) / 2
         roc_auc, pr_auc, f1 = eval_auc(sorted_pos, sorted_neg)
         
@@ -255,18 +262,9 @@ class CritiGraph(torch.nn.Module):
         
 
 # >>> Data Loading Functions <<<
-def get_train_pt(data_path, split_ratio=None, direct_load=False, dataset_name=None):
-    if direct_load:
-        split_edges = torch.load(os.path.join(data_path, f'{dataset_name}.pt'))
-    else:
-        split_edges = torch.load(os.path.join(data_path, f'split_dict_{split_ratio}.pt'))
-    return split_edges['train']['edge'].to(device).to(torch.int64)
-def get_test_pt(data_path, split_ratio=None, direct_load=False, dataset_name=None):
-    if direct_load:
-        split_edges = torch.load(os.path.join(data_path, f'{dataset_name}.pt'))
-    else:
-        split_edges = torch.load(os.path.join(data_path, f'split_dict_{split_ratio}.pt'))
-    return split_edges['test']['edge'].to(device).to(torch.int64), split_edges['test']['edge_neg'].to(device).to(torch.int64)
+def get_data(data_path, split_ratio=None, direct_load=False, dataset_name=None):
+    split_edges = torch.load(os.path.join(data_path, f'split_dict_{split_ratio}.pt'))
+    return split_edges['train']['edge'].to(device).to(torch.int64), (split_edges['test']['edge'].to(device).to(torch.int64), split_edges['test']['edge_neg'].to(device).to(torch.int64)), split_edges
 
 
 # >>> Random Seed Setting <<<
@@ -282,21 +280,21 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     
     # 2. Add arguments to the parser
-    parser.add_argument("--dataset", type=str, default='cora')
+    parser.add_argument("--dataset", type=str, default='twitter')
     parser.add_argument("--seed", type=int, default=0)
-    parser.add_argument("--epoch", type=int, default=50)
-    parser.add_argument("--split_ratio", type=float, default=0.9)
+    parser.add_argument("--epoch", type=int, default=200)
+    parser.add_argument("--split_ratio", type=float, default=0.02)
     parser.add_argument("--alpha", type=float, default=3)
-    parser.add_argument("--h", type=int, default=12)
+    parser.add_argument("--h", type=int, default=15)
     parser.add_argument("--gamma", type=float, default=3)
     parser.add_argument("--tp", type=int, default=16)
-    parser.add_argument("--c", type=int, default=1)
+    parser.add_argument("--c", type=int, default=2)
     parser.add_argument("--neg", type=int, default=1)
-    parser.add_argument("--batch_size", type=int, default=256)
+    parser.add_argument("--batch_size", type=int, default=128)
     parser.add_argument("--pos_ratio", type=float, default=1)
     parser.add_argument("--chunks", type=int, default=1)
     parser.add_argument("--convergence", type=float, default=0.8)
-    parser.add_argument("--eval_step", type=int, default=1)
+    parser.add_argument("--eval_step", type=int, default=10)
     
     # 3. Parse the command-line arguments
     args = parser.parse_args()
@@ -323,22 +321,22 @@ if __name__ == "__main__":
     print(f"dataset_name={dataset_name}, seed={seed}, epoch={epoch}, split_ratio={split_ratio}, alpha={alpha}, h={h}, gamma={gamma}, tp={tp}, c={c}, neg={neg}, batch_size={batch_size}, pos_ratio={pos_ratio}, chunks={chunks}, convergence={convergence}, eval_step={eval_step}")
     
     # 5. Load the dataset
-    if dataset_name.startswith("ogbl_"):
-        if dataset_name == "ogbl_collab":
-            data_path = f'./datasets/{dataset_name}/split/time'
-        elif dataset_name == "ogbl_ppa":
-            data_path = f'./datasets/{dataset_name}/split/throughput'    
+    if dataset_name == "ogbl_collab":
+        data_path = f'./datasets/{dataset_name}/split/time'
+    elif dataset_name == "ogbl_ppa":
+        data_path = f'./datasets/{dataset_name}/split/throughput'    
     elif dataset_name.startswith("ER"):
         data_path = f'./datasets/synthetic'  
         direct_load = True 
+    elif "icews18" in dataset_name:
+        data_path = f'./datasets/icews18/split_{dataset_name.split("_")[-1]}/'
     else:
         data_path = f'./datasets/{dataset_name}/split/'
         
     print("start to load", datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
-    train_data = get_train_pt(data_path, split_ratio, 
-                            direct_load=direct_load, dataset_name=dataset_name)
-    test_data = get_test_pt(data_path, split_ratio, 
-                            direct_load=direct_load, dataset_name=dataset_name)
+    train_data, test_data, split_edges = get_data(data_path, split_ratio, direct_load=direct_load, dataset_name=dataset_name)
+    if dataset_name == 'ogbl_citation2_node':
+        MRR['evaluator'] = NodeMRREvaluator(split_edges['test_deg'], test_data[0], test_data[1], use_fp16=True, max_memory=2.0)
     print("end to load", datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
     
     # 6. Train and Test the model

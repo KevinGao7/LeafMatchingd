@@ -80,8 +80,10 @@ class CritiGraph(torch.nn.Module):
             return p_21
         elif key == 2:
             return 1-p_12
+            # return (1-p_12)*(1-p_21)
         elif key == 3:
             return 1-p_21
+            # return (1-p_21)*(1-p_12)
     def p(self, dis, ig1, ig2):       
         deg1, deg2 = self.out_degree[ig1], self.in_degree[ig2]
         ap = (deg1+1)*(deg2+1)
@@ -416,17 +418,17 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     
     # 2. Add arguments to the parser
-    parser.add_argument("--dataset", type=str, default='cora')
+    parser.add_argument("--dataset", type=str, default='pubmed')
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--epoch", type=int, default=50)
-    parser.add_argument("--split_ratio", type=float, default=0.9)
+    parser.add_argument("--split_ratio", type=float, default=0.1)
     parser.add_argument("--alpha", type=float, default=3)
     parser.add_argument("--h", type=int, default=12)
     parser.add_argument("--gamma", type=float, default=3)
     parser.add_argument("--tp", type=int, default=16)
     parser.add_argument("--c", type=int, default=1)
-    parser.add_argument("--ty", type=str, default='single_p')
-    parser.add_argument("--r", type=int, default=0.6)
+    parser.add_argument("--ty", type=str, default='single_d')
+    parser.add_argument("--r", type=int, default=0.2)
     parser.add_argument("--neg", type=int, default=1)
     parser.add_argument("--batch_size", type=int, default=256)
     parser.add_argument("--pos_ratio", type=float, default=1)
