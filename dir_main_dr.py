@@ -123,8 +123,8 @@ class CritiGraph(torch.nn.Module):
     
     def _p_flat(self, dis: torch.Tensor, ig1: torch.Tensor, ig2: torch.Tensor) -> torch.Tensor:
         """
-         p， dis  (E,L,tp)  (E,tp)。
-        ig1, ig2:  (E,) （）。
+         p dis  (E,L,tp)  (E,tp)
+        ig1, ig2:  (E,) 
         """
         if self.oi:
             deg1 = self.out_degree[ig1]
@@ -139,7 +139,7 @@ class CritiGraph(torch.nn.Module):
 
     def _P_flat(self, dis: torch.Tensor, ig1: torch.Tensor, ig2: torch.Tensor, key: int) -> torch.Tensor:
         """
-         P ：
+         P 
         key = 0 -> p_12
         key = 1 -> p_21
         key = 2 -> 1 - p_12
@@ -207,7 +207,7 @@ class CritiGraph(torch.nn.Module):
     @torch.no_grad()
     def neighbor_batch_csr(self, sta_ind: torch.Tensor, choosing_mask_b: torch.Tensor):
         """
-         CSR  batch  out / in ， choosing_mask_b=False “”。
+         CSR  batch  out / in  choosing_mask_b=False 
 
         :
             sta_ind        : (B,) int64, batch 
@@ -218,7 +218,7 @@ class CritiGraph(torch.nn.Module):
         :
             src_* : (E_*,)  batch  0..B-1
             dst_* : (E_*,) 
-            cnt_* : (B,)  batch “”（， 1）
+            cnt_* : (B,)  batch  1
         """
         assert sta_ind.dim() == 1 and sta_ind.dtype == torch.int64
         assert choosing_mask_b.dim() == 1 and choosing_mask_b.dtype == torch.bool
@@ -274,16 +274,16 @@ class CritiGraph(torch.nn.Module):
     
     def edge_capped_node_batches(self, epoch: int, num_edges_cap: int, shuffle: bool = True):
         """
-         num_edges_cap ， batch “”
-            E_batch := E_out + E_in <= num_edges_cap。
+         num_edges_cap  batch 
+            E_batch := E_out + E_in <= num_edges_cap
 
-        epoch <= convergence * epoch ：
-            ~20%  out / in  1 ；
-        ：
-             out / in 。
+        epoch <= convergence * epoch 
+            ~20%  out / in  1 
+        
+             out / in 
 
         :
-            (sta_ind_b, choosing_mask_b)  GPU。
+            (sta_ind_b, choosing_mask_b)  GPU
         """
         device_local = self.out_degree.device
 
@@ -344,7 +344,7 @@ class CritiGraph(torch.nn.Module):
     @torch.no_grad()
     def loom_v2(self, epoch: int, sta_ind: torch.Tensor, choosing_mask_b: torch.Tensor):
         """
-         CSR  + ， head / tail  embedding。
+         CSR  +  head / tail  embedding
         """
         device_local = sta_ind.device
         B = sta_ind.size(0)
@@ -370,12 +370,12 @@ class CritiGraph(torch.nn.Module):
         
         def branch(sta_loc, cnc_loc, loc_other, src_flat, dst_flat, cnt, key_pos, key_neg):
             """
-            sta_loc : (B,tp)， embedding（head  tail）
-            cnc_loc : (B,L,tp)，
-            loc_other: (num_nodes,tp)， embedding（head<->tail）
+            sta_loc : (B,tp) embeddinghead  tail
+            cnc_loc : (B,L,tp)
+            loc_other: (num_nodes,tp) embeddinghead<->tail
             src_flat: (E,) batch  [0..B-1]
             dst_flat: (E,) 
-            cnt     : (B,) （，>=1）
+            cnt     : (B,) >=1
             key_pos :  P  key (0 or 1)
             key_neg :  P  key (2 or 3)
             :

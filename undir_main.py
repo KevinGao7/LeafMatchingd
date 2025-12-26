@@ -120,8 +120,8 @@ class CritiGraph(torch.nn.Module):
 
     def _p_flat(self, dis: torch.Tensor, ig1: torch.Tensor, ig2: torch.Tensor) -> torch.Tensor:
         """
-         p， dis  (E,L,tp)  (E,tp)。
-        ig1, ig2: (E,) 。
+         p dis  (E,L,tp)  (E,tp)
+        ig1, ig2: (E,) 
         """
         deg1 = self.degree[ig1]   # (E,)
         deg2 = self.degree[ig2]   # (E,)
@@ -132,8 +132,8 @@ class CritiGraph(torch.nn.Module):
 
     def get_neighbor(self):
         """
-         self.G  CSR  (rowptr, col)。
-         {u,v}， (u,v)  (v,u)。
+         self.G  CSR  (rowptr, col)
+         {u,v} (u,v)  (v,u)
         """
         edges = torch.tensor(list(self.G.edges()), dtype=torch.long, device=device)
         if edges.numel() == 0:
@@ -173,11 +173,11 @@ class CritiGraph(torch.nn.Module):
     @torch.no_grad()
     def neighbor_batch_csr(self, sta_ind: torch.Tensor, choosing_mask_b: torch.Tensor):
         """
-         CSR  (rowptr, col)  batch ，
-         choosing_mask_b=False “ 1 ”。
+         CSR  (rowptr, col)  batch 
+         choosing_mask_b=False  1 
 
         :
-            sta_ind        : (B,) int64，batch 
+            sta_ind        : (B,) int64batch 
             choosing_mask_b: (B,) bool
         :
             src_flat, dst_flat, cnt_all
@@ -234,16 +234,16 @@ class CritiGraph(torch.nn.Module):
 
     def edge_capped_node_batches(self, epoch: int, num_edges_cap: int, shuffle: bool = True):
         """
-        “ num_edges_cap”：
-             batch， E_batch <= num_edges_cap。
+         num_edges_cap
+             batch E_batch <= num_edges_cap
 
-        ：
-            epoch <= 4/5 * self.epoch ：
-                ~20%  1 ，；
-            ：
-                。
+        
+            epoch <= 4/5 * self.epoch 
+                ~20%  1 
+            
+                
         :
-            (sta_ind_b, choosing_mask_b)  GPU。
+            (sta_ind_b, choosing_mask_b)  GPU
         """
         device_local = self.degree.device
 
@@ -300,12 +300,12 @@ class CritiGraph(torch.nn.Module):
     @torch.no_grad()
     def loom(self, epoch: int, sta_ind: torch.Tensor, choosing_mask_b: torch.Tensor):
         """
-         CSR “”。
+         CSR 
         :
             sta_ind        : (B,) 
             choosing_mask_b: (B,) bool
         :
-            tl, pl, nl: ， loss /  loss /  loss
+            tl, pl, nl:  loss /  loss /  loss
         """
         device_local = sta_ind.device
         B = sta_ind.size(0)

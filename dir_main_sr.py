@@ -81,9 +81,9 @@ class CritiGraph(torch.nn.Module):
 
     def _p_flat(self, dis: Tensor, ig1: Tensor, ig2: Tensor) -> Tensor:
         """
-         p， dis  (E,L,tp)  (E,tp)。
-        ig1, ig2:  (E,) （ 0..N-1）。
-        :  dis 。
+         p dis  (E,L,tp)  (E,tp)
+        ig1, ig2:  (E,)  0..N-1
+        :  dis 
         """
         deg1 = self.out_degree[ig1]  # (E,)
         deg2 = self.in_degree[ig2]   # (E,)
@@ -95,7 +95,7 @@ class CritiGraph(torch.nn.Module):
 
     def _P_flat(self, dis: Tensor, ig1: Tensor, ig2: Tensor, key: str) -> Tensor:
         """
-         P ：
+         P 
         key='in'  -> p_21
         key='out' -> p_12
         key='neg' -> (1-p_12)*(1-p_21)
@@ -114,16 +114,16 @@ class CritiGraph(torch.nn.Module):
     @torch.no_grad()
     def neighbor_batch_fixed_csr(self, sta_ind: torch.Tensor, choosing_mask_b: torch.Tensor):
         """
-         CSR（all/in/out） + 20% （ choosing=False ）
+         CSRall/in/out + 20%  choosing=False 
         :
-        sta_ind         : (B,) int64，（0..N-1）
-        choosing_mask_b : (B,) bool，True=，False= 1 （）
+        sta_ind         : (B,) int640..N-1
+        choosing_mask_b : (B,) boolTrue=False= 1 
         :
-        self.rowptr, self.col : tuple  3， (all, in, out)， int64 1-D
-         self.col[j]  -1 ， col[:-1]
+        self.rowptr, self.col : tuple  3 (all, in, out) int64 1-D
+         self.col[j]  -1  col[:-1]
         :
         (src_all, dst_all, cnt_all, src_in, dst_in, src_out, dst_out)
-         src_*  [0..B-1]， index_add_。
+         src_*  [0..B-1] index_add_
         """
         
         assert sta_ind.dim() == 1 and sta_ind.dtype == torch.int64
@@ -157,7 +157,7 @@ class CritiGraph(torch.nn.Module):
             """
             :
             src_flat, dst_flat, cnt_per_node_before_sample
-             cnt_per_node_before_sample  (B,) （）
+             cnt_per_node_before_sample  (B,) 
             """
             off  = ro[sta_ind]                         # (B,)
             deg  = ro[sta_ind + 1] - off               # (B,)
@@ -332,10 +332,10 @@ class CritiGraph(torch.nn.Module):
     
     def edge_capped_node_batches(self, epoch: int, num_edges_cap: int, shuffle: bool = True):
         """
-         num_edges_cap ， batch “”
-        E_batch := (all ) + (in ) + (out ) <= num_edges_cap。
-        ：，20%  1 （>0）。
-        : (sta_ind_b, choosing_mask_b)   GPU 。
+         num_edges_cap  batch 
+        E_batch := (all ) + (in ) + (out ) <= num_edges_cap
+        20%  1 >0
+        : (sta_ind_b, choosing_mask_b)   GPU 
         """
         device = self.out_degree.device
 

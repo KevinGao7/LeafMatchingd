@@ -18,7 +18,7 @@ def _sample_test_neg(num_needed: int,
                      train_nodes_arr: np.ndarray,
                      pos_edge_set: set) -> np.ndarray:
     """
-     train_nodes × train_nodes ，，。
+     train_nodes × train_nodes 
      shape = (num_needed, 2)  np.ndarray[int64]
     """
     result = set()
