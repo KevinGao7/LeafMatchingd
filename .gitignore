@@ -23,4 +23,5 @@ embeddings/
 dir_datasets/
 ori_datasets/
 undir_datasets/
-./OurCogDL
+OurCogDL
+ori_datasets
