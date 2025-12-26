@@ -66,19 +66,19 @@ def split_dataset(name, split_ratio, data_type):
     datawrapper.pre_transform(split_ratio)
     train_data: torch.Tensor = datawrapper.train_wrapper() # type: ignore
     test_data: Tuple[torch.Tensor, torch.Tensor] = datawrapper.test_wrapper() # type: ignore
-    ### shape 都是 (2, E) 吗？形状检测：
+    
     if train_data.shape[0] != 2 or test_data[0].shape[0] != 2 or test_data[1].shape[0] != 2:
         raise ValueError("Train and test data must have shape (2, E).")
     
-    # >>> 手动重映射编号，因为 split 后某些节点不可见而无意义 <<< #
+    
     def get_remap(train_data, test_data):
-        all_nodes = torch.cat([train_data[0], train_data[1]]) # 我们保证了 test 的点都在 train 内
+        all_nodes = torch.cat([train_data[0], train_data[1]]) 
         uniq_nodes = torch.unique(all_nodes)
         remap = - torch.ones(torch.max(uniq_nodes).item() + 1, dtype=torch.long) # type: ignore
         for i, node in enumerate(uniq_nodes):
             remap[node] = i
         
-        # 错误检测：test_data[0] 和 test_data[1] 中的节点是否都在 train_data 中
+        
         if not torch.all(torch.isin(test_data[0], uniq_nodes)) and not torch.all(torch.isin(test_data[1], uniq_nodes)):
             raise ValueError("Test data contain nodes not in training data.")
         
@@ -89,9 +89,9 @@ def split_dataset(name, split_ratio, data_type):
     test_data = (remap[test_data[0]], remap[test_data[1]])
     if node_feat is not None:
         node_feat = node_feat[uniq_nodes] 
-        # uniq_nodes: 下标为新编号，值为旧编号; remap: 下标为旧编号，值为新编号; node_feat[uniq_nodes]: 对于 node_feat[i]，我们首先得到 uniq_nodes[i]，它代表第 i 个新编号对应的旧编号，所以 node_feat[uniq_nodes[i]] 代表的是第 i 个新编号对应的旧编号的 node_feat，所以正确。
-    N = len(uniq_nodes)  # 节点总数
-    test_deg = torch.bincount(test_data[0][0], minlength=N)  # 统计 test_pos 中每个节点的度数
+        
+    N = len(uniq_nodes)  
+    test_deg = torch.bincount(test_data[0][0], minlength=N)  
     
     
     # >>> Transform and Save >>> #

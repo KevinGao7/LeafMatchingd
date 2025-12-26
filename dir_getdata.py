@@ -61,24 +61,24 @@ import numpy as np
 from torch_geometric.datasets import ICEWS18
 
 def load_icews18(root, type: Literal['min', 'mid', 'max']=None):
-    # 加载训练、验证和测试数据
+    
     train_dataset = ICEWS18(root, split='train')
     val_dataset = ICEWS18(root, split='val')
     test_dataset = ICEWS18(root, split='test')
     
-    # 合并数据
+    
     dataset = train_dataset
     dataset.data.sub = torch.cat([train_dataset.data.sub, val_dataset.data.sub, test_dataset.data.sub], dim=0)
     dataset.data.obj = torch.cat([train_dataset.data.obj, val_dataset.data.obj, test_dataset.data.obj], dim=0)
     dataset.data.rel = torch.cat([train_dataset.data.rel, val_dataset.data.rel, test_dataset.data.rel], dim=0)
     dataset.data.t = torch.cat([train_dataset.data.t, val_dataset.data.t, test_dataset.data.t], dim=0)
     
-    # 初始化边集和时间存储
+    
     edge_index = []
     edge_t = []
     time_dict = {}
 
-    # 根据 type 选择时间处理方式
+    
     if type == 'min':
         time_func = np.min
     elif type == 'mid':
@@ -88,32 +88,32 @@ def load_icews18(root, type: Literal['min', 'mid', 'max']=None):
     else:
         raise ValueError("Invalid type. Must be 'min', 'mid', or 'max'.")
     
-    # 记录每个 (u, v) 边的所有时间
+    
     for i, (u, v) in enumerate(zip(dataset.data.sub, dataset.data.obj)):
         pair = (u.item(), v.item())
         if pair not in time_dict:
             time_dict[pair] = []
         time_dict[pair].append(dataset.data.t[i].item())
 
-    # 根据 `type` 计算每条边的时间值
+    
     for pair in time_dict:
         times = np.array(time_dict[pair])
         selected_time = time_func(times)
         edge_index.append(pair)
         edge_t.append(selected_time)
     
-    # 更新边集中的时间
+    
     dataset.data.edge_index = torch.tensor(edge_index, dtype=torch.int64).t()
     dataset.data.edge_t = torch.tensor(edge_t, dtype=torch.float32)
     
-    # 计算 split_time 字典
+    
     split_time = {}
     sorted_times = np.sort(edge_t)
     total_edges = len(edge_t)
     
     for split_ratio in [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]:
         index = int(total_edges * split_ratio)
-        split_time[split_ratio] = sorted_times[index - 1]  # 使用小于等于此时间的边占比为 split_ratio
+        split_time[split_ratio] = sorted_times[index - 1]  
     
     
     dataset.split_time = split_time
@@ -122,7 +122,7 @@ def load_icews18(root, type: Literal['min', 'mid', 'max']=None):
 
 def load_csv_amazon(root):
     edges = pd.read_csv(root)
-    print(f"表头: {edges.columns.tolist()}")
+    print(f": {edges.columns.tolist()}")
     edge_index = np.array(edges[['source', 'target']].values.T, dtype=np.int64) # shape (2, E)
     return edge_index
 
@@ -147,8 +147,8 @@ def transform_txt(train_data, test_data, node_feat=None):
     train_pos = [[], []]
     test_pos = []
     test_neg = []
-    valid_pos = [[train_data[0][0].item(), train_data[0][0].item()], [train_data[0][1].item(), train_data[0][0].item()]] # 默认为空，不作数
-    valid_neg = [[train_data[0][0].item(), train_data[0][0].item()], [train_data[0][1].item(), train_data[0][0].item()]] # 默认为空，不作数
+    valid_pos = [[train_data[0][0].item(), train_data[0][0].item()], [train_data[0][1].item(), train_data[0][0].item()]] 
+    valid_neg = [[train_data[0][0].item(), train_data[0][0].item()], [train_data[0][1].item(), train_data[0][0].item()]] 
     
     # train_data
     for u, v in zip(train_data[0], train_data[1]):
@@ -239,19 +239,19 @@ def split_dataset(name, split_ratio, data_type):
     datawrapper.pre_transform(split_ratio)
     train_data: torch.Tensor = datawrapper.train_wrapper() # type: ignore
     test_data: Tuple[torch.Tensor, torch.Tensor] = datawrapper.test_wrapper() # type: ignore
-    ### shape 都是 (2, E) 吗？形状检测：
+    
     if train_data.shape[0] != 2 or test_data[0].shape[0] != 2 or test_data[1].shape[0] != 2:
         raise ValueError("Train and test data must have shape (2, E).")
     
-    # >>> 手动重映射编号，因为 split 后某些节点不可见而无意义 <<< #
+    
     def get_remap(train_data, test_data):
-        all_nodes = torch.cat([train_data[0], train_data[1]]) # 我们保证了 test 的点都在 train 内
+        all_nodes = torch.cat([train_data[0], train_data[1]]) 
         uniq_nodes = torch.unique(all_nodes)
         remap = - torch.ones(torch.max(uniq_nodes).item() + 1, dtype=torch.long) # type: ignore
         for i, node in enumerate(uniq_nodes):
             remap[node] = i
         
-        # 错误检测：test_data[0] 和 test_data[1] 中的节点是否都在 train_data 中
+        
         if not torch.all(torch.isin(test_data[0], uniq_nodes)) and not torch.all(torch.isin(test_data[1], uniq_nodes)):
             raise ValueError("Test data contain nodes not in training data.")
         
@@ -262,11 +262,11 @@ def split_dataset(name, split_ratio, data_type):
     test_data = (remap[test_data[0]], remap[test_data[1]])
     if node_feat is not None:
         node_feat = node_feat[uniq_nodes] 
-        # uniq_nodes: 下标为新编号，值为旧编号; remap: 下标为旧编号，值为新编号; node_feat[uniq_nodes]: 对于 node_feat[i]，我们首先得到 uniq_nodes[i]，它代表第 i 个新编号对应的旧编号，所以 node_feat[uniq_nodes[i]] 代表的是第 i 个新编号对应的旧编号的 node_feat，所以正确。
-    N = len(uniq_nodes)  # 节点总数
-    test_deg = torch.bincount(test_data[0][0], minlength=N)  # 统计 test_pos 中每个节点的度数
+        
+    N = len(uniq_nodes)  
+    test_deg = torch.bincount(test_data[0][0], minlength=N)  
     
-    # 如果是 ogbl-citation2-node 数据集，就需要把 test 边排好序
+    
     if name == 'ogbl_citation2_node' :
         # Convert to (E, 2) shape for sorting
         test_pos_edges = test_data[0].t()  # Shape: (E, 2)
@@ -285,7 +285,7 @@ def split_dataset(name, split_ratio, data_type):
         test_neg_sorted = test_neg_edges[test_neg_sorted_indices].t()
         
         test_data = (test_pos_sorted, test_neg_sorted)
-        check_citation2_data(test_data[0], test_data[1], test_deg, N, K)  # 检查 test_pos 和 test_neg 的正确性
+        check_citation2_data(test_data[0], test_data[1], test_deg, N, K)  
     
 
     

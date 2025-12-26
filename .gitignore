@@ -19,3 +19,7 @@ embeddings/
 *.out
 *.pyc
 *.svg
+*.txt
+dir_datasets/
+ori_datasets/
+undir_datasets/

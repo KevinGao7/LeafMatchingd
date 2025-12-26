@@ -17,7 +17,7 @@ import sys
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
 
-# >>> Dataset (当前不再使用 DataLoader 训练, 保留以兼容) <<< #
+
 class MyDataset(Dataset):
     def __init__(self, indices):
         self.indices = indices
@@ -43,7 +43,7 @@ class CritiGraph(torch.nn.Module):
         self.gamma = gamma
         self.alpha = alpha
         self.epoch = epoch
-        # 原 batch_size 作为节点 batch 大小，这里改造成“每个 batch 的有效边数上限”
+        
         self.batch_size = batch_size
         self.batch_edge = batch_size
 
@@ -53,9 +53,9 @@ class CritiGraph(torch.nn.Module):
         self.chunks = chunks
         self.convergence = convergence
         self.eval_step = eval_step
-        self.oi = oi  # 0: 用 degree; 1: 用 out_degree / in_degree
+        self.oi = oi  
 
-    # --- 距离与连接结构 --- #
+    
     def generate_distance_lookup_table(self):
         xor_results = torch.arange(self.n, dtype=torch.int64, device=device)
         return torch.where(
@@ -89,7 +89,7 @@ class CritiGraph(torch.nn.Module):
     def heaviside(self, x):
         return torch.where(x <= 0, torch.tensor(0.0, device=device), torch.tensor(1.0, device=device))
 
-    # --- 原来的 p / P / p_test（保持接口不变，训练时用 _p_flat / _P_flat） --- #
+    
     def P(self, dis, ig1, ig2, key):
         p_12 = self.p(dis, ig1, ig2)
         p_21 = self.p(dis, ig2, ig1)
@@ -120,11 +120,11 @@ class CritiGraph(torch.nn.Module):
         aa = (dis+self.eps)/torch.log(ap)
         return 1/(1+aa**self.gamma/self.alpha)
 
-    # --- 扁平版本的 p / P, 用于基于边的实现 --- #
+    
     def _p_flat(self, dis: torch.Tensor, ig1: torch.Tensor, ig2: torch.Tensor) -> torch.Tensor:
         """
-        扁平版本的 p，支持 dis 形状为 (E,L,tp) 或 (E,tp)。
-        ig1, ig2: 形状 (E,) 的节点索引（新图编号）。
+         p， dis  (E,L,tp)  (E,tp)。
+        ig1, ig2:  (E,) （）。
         """
         if self.oi:
             deg1 = self.out_degree[ig1]
@@ -139,7 +139,7 @@ class CritiGraph(torch.nn.Module):
 
     def _P_flat(self, dis: torch.Tensor, ig1: torch.Tensor, ig2: torch.Tensor, key: int) -> torch.Tensor:
         """
-        与原 P 完全等价的扁平版本：
+         P ：
         key = 0 -> p_12
         key = 1 -> p_21
         key = 2 -> 1 - p_12
@@ -158,12 +158,12 @@ class CritiGraph(torch.nn.Module):
         else:
             raise ValueError(f"Unknown key={key}")
 
-    # --- CSR 邻接: out / in --- #
+    
     def get_neighbor(self):
         """
-        基于有向图 self.G 构造两套 CSR 邻接:
-            out: 行 = 源节点 u, 列 = 所有 v, 使得 u->v
-            in : 行 = 目标节点 u, 列 = 所有 v, 使得 v->u
+         self.G  CSR :
+            out:  =  u,  =  v,  u->v
+            in :  =  u,  =  v,  v->u
         """
         edges = torch.tensor(list(self.G.edges()), dtype=torch.long, device=device)
         if edges.numel() == 0:
@@ -192,7 +192,7 @@ class CritiGraph(torch.nn.Module):
         adj_in  = get_sparse_adj(idx_in)
 
         def coo_to_csr(adj: torch.Tensor):
-            row, col = adj.indices()  # 行优先有序
+            row, col = adj.indices()  
             col = torch.cat((col, torch.tensor([-1], dtype=torch.long, device=device)))
             counts = torch.bincount(row, minlength=self.num_nodes)
             rowptr = torch.empty(self.num_nodes + 1, dtype=torch.long, device=device)
@@ -203,22 +203,22 @@ class CritiGraph(torch.nn.Module):
         self.rowptr_out, self.col_out = coo_to_csr(adj_out)
         self.rowptr_in,  self.col_in  = coo_to_csr(adj_in)
 
-    # --- 基于 CSR 的邻居展开（out/in 各一套） --- #
+    
     @torch.no_grad()
     def neighbor_batch_csr(self, sta_ind: torch.Tensor, choosing_mask_b: torch.Tensor):
         """
-        从 CSR 邻接中展开 batch 内所有 out / in 边，并对 choosing_mask_b=False 的节点执行“单邻采样”。
+         CSR  batch  out / in ， choosing_mask_b=False “”。
 
-        输入:
-            sta_ind        : (B,) int64, batch 内节点索引
+        :
+            sta_ind        : (B,) int64, batch 
             choosing_mask_b: (B,) bool
-        返回:
+        :
             src_out, dst_out, cnt_out,
             src_in,  dst_in,  cnt_in
-        其中:
-            src_* : (E_*,) 对应 batch 内节点下标 0..B-1
-            dst_* : (E_*,) 对应全图节点索引
-            cnt_* : (B,) 每个 batch 节点在该方向上的“有效边数”（采样后，最少为 1）
+        :
+            src_* : (E_*,)  batch  0..B-1
+            dst_* : (E_*,) 
+            cnt_* : (B,)  batch “”（， 1）
         """
         assert sta_ind.dim() == 1 and sta_ind.dtype == torch.int64
         assert choosing_mask_b.dim() == 1 and choosing_mask_b.dtype == torch.bool
@@ -227,7 +227,7 @@ class CritiGraph(torch.nn.Module):
 
         def expand_and_sample(ro: torch.Tensor, co: torch.Tensor):
             ro = ro
-            co = co[:-1]  # 去掉最后的 -1 哨兵
+            co = co[:-1]  
             off = ro[sta_ind]                     # (B,)
             deg = ro[sta_ind + 1] - off           # (B,)
             valid = deg > 0                       # (B,)
@@ -245,7 +245,7 @@ class CritiGraph(torch.nn.Module):
                 dst_flat = co[base + ofs]                              # (E,)
                 bc = torch.bincount(src_flat, minlength=B)             # (B,)
 
-                # 20% 节点只保留 1 条边
+                
                 if (~choosing_mask_b[src_flat]).any():
                     keep_all = choosing_mask_b[src_flat]               # (E,)
                     head_e = torch.cumsum(bc, 0) - bc                  # (B,)
@@ -271,19 +271,19 @@ class CritiGraph(torch.nn.Module):
 
         return src_out, dst_out, cnt_out, src_in, dst_in, cnt_in
 
-    # --- 按“有效边数上限”切节点 batch --- #
+    
     def edge_capped_node_batches(self, epoch: int, num_edges_cap: int, shuffle: bool = True):
         """
-        按照 num_edges_cap 生成一批批节点，使得每个 batch 的“有效边数”
+         num_edges_cap ， batch “”
             E_batch := E_out + E_in <= num_edges_cap。
 
-        epoch <= convergence * epoch 时：
-            ~20% 节点在 out / in 方向各只保留 1 条边；
-        之后：
-            所有节点保留全部 out / in 边。
+        epoch <= convergence * epoch ：
+            ~20%  out / in  1 ；
+        ：
+             out / in 。
 
-        产出:
-            (sta_ind_b, choosing_mask_b) 均在 GPU。
+        :
+            (sta_ind_b, choosing_mask_b)  GPU。
         """
         device_local = self.out_degree.device
 
@@ -292,7 +292,7 @@ class CritiGraph(torch.nn.Module):
         else:
             choosing_mask_global = torch.ones(self.num_nodes, dtype=torch.bool, device=device_local)
 
-        # 只考虑 out_degree + in_degree > 0 的节点
+        
         nodes = self.li.clone()
         if shuffle:
             perm = torch.randperm(nodes.numel(), device=device_local)
@@ -304,7 +304,7 @@ class CritiGraph(torch.nn.Module):
 
         eff_out = torch.where(mask_b, deg_out, deg_out.clamp_max(1))
         eff_in  = torch.where(mask_b, deg_in,  deg_in.clamp_max(1))
-        cost    = eff_out + eff_in   # 每个节点在本 epoch 下的有效边数
+        cost    = eff_out + eff_in   
 
         cur_nodes = []
         cur_mask  = []
@@ -340,21 +340,21 @@ class CritiGraph(torch.nn.Module):
             choosing_mask_b = torch.tensor(cur_mask, device=device_local, dtype=torch.bool)
             yield sta_ind_b, choosing_mask_b
 
-    # --- 基于边的训练步（同时更新 head / tail） --- #
+    
     @torch.no_grad()
     def loom_v2(self, epoch: int, sta_ind: torch.Tensor, choosing_mask_b: torch.Tensor):
         """
-        基于 CSR 邻接 + 边视角的训练步，分别在 head / tail 空间更新 embedding。
+         CSR  + ， head / tail  embedding。
         """
         device_local = sta_ind.device
         B = sta_ind.size(0)
         tp = self.tp
 
-        # 当前 batch 节点的 head / tail embedding
+        
         sta_head = self.locations[0][sta_ind]   # (B,tp)
         sta_tail = self.locations[1][sta_ind]   # (B,tp)
 
-        # 生成候选
+        
         cnc_head = self.connection(sta_head)    # (B,L,tp)
         cnc_tail = self.connection(sta_tail)    # (B,L,tp)
         L = cnc_head.size(1)
@@ -364,21 +364,21 @@ class CritiGraph(torch.nn.Module):
         cnc_head = cnc_head[:, perm_head, :]
         cnc_tail = cnc_tail[:, perm_tail, :]
 
-        # 展开 out/in 边
+        
         src_out, dst_out, cnt_out, src_in, dst_in, cnt_in = self.neighbor_batch_csr(sta_ind, choosing_mask_b)
 
-        # 工具函数：单方向 (out 或 in) 的正负分支
+        
         def branch(sta_loc, cnc_loc, loc_other, src_flat, dst_flat, cnt, key_pos, key_neg):
             """
-            sta_loc : (B,tp)，当前节点在某一空间的 embedding（head 或 tail）
-            cnc_loc : (B,L,tp)，对应空间的候选
-            loc_other: (num_nodes,tp)，另一空间的 embedding（head<->tail）
-            src_flat: (E,) batch 内节点索引 [0..B-1]
-            dst_flat: (E,) 全图节点索引
-            cnt     : (B,) 每节点有效边数（采样后，>=1）
-            key_pos : 正样本 P 的 key (0 or 1)
-            key_neg : 负样本 P 的 key (2 or 3)
-            返回:
+            sta_loc : (B,tp)， embedding（head  tail）
+            cnc_loc : (B,L,tp)，
+            loc_other: (num_nodes,tp)， embedding（head<->tail）
+            src_flat: (E,) batch  [0..B-1]
+            dst_flat: (E,) 
+            cnt     : (B,) （，>=1）
+            key_pos :  P  key (0 or 1)
+            key_neg :  P  key (2 or 3)
+            :
                 pos_loss, neg_loss: (B,L,tp)
             """
             pos_loss = torch.zeros((B, L, tp), dtype=torch.float32, device=device_local)
@@ -392,7 +392,7 @@ class CritiGraph(torch.nn.Module):
             cnc_src_vec = cnc_loc[src_flat]          # (E,L,tp)
             pos_dst_vec = loc_other[dst_flat]        # (E,tp)
 
-            # 正样本距离与 reweight
+            
             dis_sta_pos = self.distance(sta_src_vec, pos_dst_vec).float()      # (E,tp)
             dis_sta_posum = dis_sta_pos.sum(dim=-1)                             # (E,)
             dis_pos_cnc = self.distance(cnc_src_vec, pos_dst_vec.unsqueeze(1)).float()  # (E,L,tp)
@@ -409,7 +409,7 @@ class CritiGraph(torch.nn.Module):
             pos_acc.index_add_(0, src_flat, ll_pos)
             pos_loss = pos_acc / cnt.view(-1, 1, 1)                            # (B,L,tp)
 
-            # 负样本：与 out/in 边数对齐，一条正边配一条负边
+            
             neg_dst_flat = torch.randint(
                 0, self.num_nodes, (E,),
                 dtype=torch.long, device=device_local
@@ -434,13 +434,13 @@ class CritiGraph(torch.nn.Module):
 
             return pos_loss, neg_loss
 
-        # out 方向：节点作为 head，邻居作为 tail
+        
         pos_out, neg_out = branch(
             sta_head, cnc_head, self.locations[1],
             src_out, dst_out, cnt_out,
             key_pos=0, key_neg=2
         )
-        # in 方向：节点作为 tail，邻居作为 head
+        
         pos_in, neg_in = branch(
             sta_tail, cnc_tail, self.locations[0],
             src_in, dst_in, cnt_in,
@@ -456,7 +456,7 @@ class CritiGraph(torch.nn.Module):
         b_idx = torch.arange(B, device=device_local)[:, None]       # (B,1)
         t_idx = torch.arange(tp, device=device_local)[None, :]      # (1,tp)
 
-        # 更新 head / tail embedding
+        
         self.locations[0][sta_ind[b_idx], t_idx] = cnc_head[b_idx, index_out, t_idx]
         self.locations[1][sta_ind[b_idx], t_idx] = cnc_tail[b_idx, index_in,  t_idx]
 
@@ -468,7 +468,7 @@ class CritiGraph(torch.nn.Module):
         nl = gather_bt(neg_out,   index_out) + gather_bt(neg_in,   index_in)
         return tl, pl, nl
 
-    # --- 训练主循环 --- #
+    
     def forward(self, graph, test_pos, test_neg):
         current_time = datetime.now()
         print("current_time:", current_time.strftime("%Y-%m-%d %H:%M:%S"))
@@ -481,7 +481,7 @@ class CritiGraph(torch.nn.Module):
         old_nodes = list(self.Go.nodes())
         self.mapping = {old_node: new_node for new_node, old_node in enumerate(old_nodes)}
 
-        num_old_nodes = max(old_nodes) + 10  # bucket_tensor 预留
+        num_old_nodes = max(old_nodes) + 10  
         self.bucket_tensor = torch.full((num_old_nodes,), -1, dtype=torch.long)
         for new_node, old_node in enumerate(old_nodes):
             self.bucket_tensor[old_node] = new_node
@@ -504,15 +504,15 @@ class CritiGraph(torch.nn.Module):
         self.degree     = torch.IntTensor([self.G.degree(n)     for n in self.G.nodes()]).cuda().to(torch.int64)
         self.max_degree = self.degree.max()
 
-        # 构造 CSR 邻接
+        
         self.get_neighbor()
 
-        # 初始化 head / tail embedding
+        
         self.locations_head = torch.randint(0, self.n, (self.num_nodes, self.tp), dtype=torch.int64, device=device)
         self.locations_tail = torch.randint(0, self.n, (self.num_nodes, self.tp), dtype=torch.int64, device=device)
         self.locations = [self.locations_head, self.locations_tail]
 
-        # 度>0 的节点集合（out + in）
+        
         self.li = torch.arange(self.num_nodes, dtype=torch.int64, device=device)[
             (self.out_degree + self.in_degree) > 0
         ]
@@ -527,7 +527,7 @@ class CritiGraph(torch.nn.Module):
             node_count = 0
             total_time = 0.0
 
-            # 以“有效边数上限”为约束分批
+            
             for sta_ind_b, choosing_mask_b in self.edge_capped_node_batches(epoch, self.batch_edge, shuffle=True):
                 st_time = datetime.now()
                 tl, pl, nl = self.loom_v2(epoch, sta_ind_b, choosing_mask_b)
@@ -556,7 +556,7 @@ class CritiGraph(torch.nn.Module):
                 sys.stdout.flush()
                 self.eval(test_pos, test_neg, epoch)
 
-    # --- 测试打分 --- #
+    
     def get_score(self, data):
         dt = data.t()
         dt1 = self.bucket_tensor[dt[0]]
@@ -643,7 +643,7 @@ if __name__ == "__main__":
     parser.add_argument("--tp", type=int, default=16)
     parser.add_argument("--c", type=int, default=1)
     parser.add_argument("--neg", type=int, default=1)
-    parser.add_argument("--batch_size", type=int, default=256)  # 现在作为“每个 batch 的最大有效边数”
+    parser.add_argument("--batch_size", type=int, default=256)  
     parser.add_argument("--pos_ratio", type=float, default=1)
     parser.add_argument("--chunks", type=int, default=1)
     parser.add_argument("--convergence", type=float, default=0.8)

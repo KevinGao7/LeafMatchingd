@@ -1,80 +1,130 @@
-import networkx as nx
-import matplotlib.pyplot as plt
-import numpy as np
+# -*- coding: utf-8 -*-
 import os
-import pandas as pd
+import os.path as osp
+import sys
+import numpy as np
 import torch
+import igraph as ig
 
-# erdos renyi graph
+
 SEED = 42
-np.random.seed(SEED)
-for i in range(10, 20):
+TEST_RATIO = 0.1     
+NEG_RATIO  = 1       
+AVERAGE_DEGREE = 5   
+POWERS = range(10, 20)  
+# ==========================
 
-    num_node = 2**i
-    test_ratio = 0.1
-    neg_ratio = 1
-    average_degree = 5
-    p = average_degree/num_node
-
-    # positive edges
-    G = nx.erdos_renyi_graph(num_node, p, seed=SEED)
-    pos_edge_set = set(G.edges())
-    pos_edge_array = np.array(list(pos_edge_set))
-
-        # split into train/test
-    perm_indices = np.random.permutation(len(pos_edge_array))
-    train_pos_len = int(len(pos_edge_array) * (1 - test_ratio))
-    train_pos = pos_edge_array[perm_indices[:train_pos_len]]
-    test_pos = pos_edge_array[perm_indices[train_pos_len:]]
-
-        # filter out unobserved edges
-    train_nodes = set(train_pos.flatten())
-    test_pos_filtered = [edge for edge in test_pos if edge[0] in train_nodes and edge[1] in train_nodes]
-    print("node nums:", 2 ** i, "train_pos_len:", train_pos_len, "len(test_pos):", len(test_pos), "len(test_pos_filtered):", len(test_pos_filtered))
-    test_pos = np.array(test_pos_filtered)
-
-    # negative edges
-    test_neg_len = int(len(test_pos) * neg_ratio)
-    test_neg = set()
-    while len(test_neg) < test_neg_len:
-        new_edge = (np.random.randint(0, num_node), np.random.randint(0, num_node))
-        if new_edge not in pos_edge_set and new_edge[0] in train_nodes and new_edge[1] in train_nodes:
-            test_neg.add(new_edge)
-
-    # save
-    savedir = f'./dir_datasets/'
-    if not os.path.exists(savedir):
-        os.makedirs(savedir)
-
-    train = {'edge': []}
-    test = {'edge': [], 'edge_neg': []}
-    valid = {'edge': [], 'edge_neg': []}
-
-    print("processing train data")
-    # train data
-    for u, v in zip(train_pos[:, 0], train_pos[:, 1]):
-        train['edge'].append([u.item(), v.item()])
+def _sample_test_neg(num_needed: int,
+                     train_nodes_arr: np.ndarray,
+                     pos_edge_set: set) -> np.ndarray:
+    """
+     train_nodes × train_nodes ，，。
+     shape = (num_needed, 2)  np.ndarray[int64]
+    """
+    result = set()
+    m = len(train_nodes_arr)
+    
+    while len(result) < num_needed:
         
-    print("processing test data")
-    # test data
-    test['edge'] = test_pos
-    test['edge_neg'] = list(test_neg)
+        batch = max(2 * num_needed, 4 * (num_needed - len(result)))
+        us = np.random.choice(train_nodes_arr, size=batch, replace=True)
+        vs = np.random.choice(train_nodes_arr, size=batch, replace=True)
+        mask = (us != vs)
+        cand = np.stack([us[mask], vs[mask]], axis=1)
 
-    print("processing valid data")
-    # valid data
-    valid['edge'] = [[train['edge'][0][0], train['edge'][0][1]]]
-    valid['edge_neg'] = [[train['edge'][0][0], train['edge'][0][1]]]
-    
-    print("processing complete")
-    
-    train['edge'] = torch.tensor(train['edge'])
-    test['edge'] = torch.tensor(test['edge'])
-    test['edge_neg'] = torch.tensor(test['edge_neg'])
-    valid['edge'] = torch.tensor(valid['edge'])
-    valid['edge_neg'] = torch.tensor(valid['edge_neg'])
-    
-    torch.save({
-        'train': train,
-        'test': test,
-        'valid': valid
-    }, os.path.join(savedir, f'ER_{num_node}_{average_degree}', 'data.pt'))
+        
+        for u, v in cand:
+            tup = (int(u), int(v))
+            if tup not in pos_edge_set and tup not in result:
+                result.add(tup)
+                if len(result) >= num_needed:
+                    break
+    neg = np.fromiter((x for t in result for x in t), dtype=np.int64)
+    return neg.reshape(-1, 2)
+
+def main():
+    np.random.seed(SEED)
+
+    for i in POWERS:
+        num_node = 2 ** i
+        p = AVERAGE_DEGREE / num_node
+
+        
+        print(f"Generating ER graph with n={num_node}, p={p:.8f} ...")
+        sys.stdout.flush()
+        G = ig.Graph.Erdos_Renyi(n=num_node, p=p, directed=True, loops=False)
+        print("Generation done.")
+        sys.stdout.flush()
+        
+        
+        edges = np.array(G.get_edgelist(), dtype=np.int64)          # (E, 2)
+        pos_edge_set = set(map(tuple, edges))
+
+        
+        perm = np.random.permutation(len(edges))
+        train_pos_len = int(len(edges) * (1.0 - TEST_RATIO))
+        train_pos = edges[perm[:train_pos_len]]
+        test_pos_raw = edges[perm[train_pos_len:]]
+
+        
+        train_nodes = set(map(int, train_pos.flatten()))
+        test_pos = np.array(
+            [(u, v) for (u, v) in map(tuple, test_pos_raw)
+             if (u in train_nodes) and (v in train_nodes)],
+            dtype=np.int64
+        )
+
+        print(f"[n={num_node}] train_pos_len={len(train_pos)} "
+              f"test_pos_raw={len(test_pos_raw)} test_pos_filtered={len(test_pos)}")
+        sys.stdout.flush()
+        
+        
+        test_neg_len = int(len(test_pos) * NEG_RATIO)
+        train_nodes_arr = np.array(sorted(train_nodes), dtype=np.int64)
+        test_neg = _sample_test_neg(test_neg_len, train_nodes_arr, pos_edge_set)
+
+        
+        
+        train_data = torch.from_numpy(train_pos.T).long()      # (2, E_train)
+        test_pos_t = torch.from_numpy(test_pos.T).long()       # (2, E_test_pos)
+        test_neg_t = torch.from_numpy(test_neg.T).long()       # (2, E_test_neg)
+
+        
+        N = num_node
+        test_deg = torch.bincount(test_pos_t[0], minlength=N)
+
+        
+        # transform_pt: train = {'edge': train_data.t()}, test = {'edge': test_pos.t(), 'edge_neg': test_neg.t()}
+        train_dict = {'edge': train_data.t()}  # (E_train, 2)
+        test_dict  = {'edge': test_pos_t.t(), 'edge_neg': test_neg_t.t()}  # (E,2)
+        
+        valid_dict = {
+            'edge':      train_data[:, :2].t(),   
+            'edge_neg':  train_data[:, :2].t()
+        }
+
+        
+        savedir = f'.dir_datasets//ER_{num_node}_{AVERAGE_DEGREE}'
+        if not osp.exists(savedir):
+            os.makedirs(savedir)
+
+        torch.save(
+            {
+                'train': train_dict,
+                'test':  test_dict,
+                'valid': valid_dict,
+                'x':     None,          
+                'remap': None,          
+                'uniq_nodes': None,     
+                'test_deg': test_deg    
+            },
+            osp.join(savedir, f'data.pt')
+        )
+
+        print(f"Saved: {osp.join(savedir, f'data.pt')} ; "
+              f"Train E={train_dict['edge'].shape[0]}, "
+              f"Test+={test_dict['edge'].shape[0]}, Test-={test_dict['edge_neg'].shape[0]}")
+        sys.stdout.flush()
+
+if __name__ == "__main__":
+    main()

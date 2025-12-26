@@ -24,7 +24,7 @@ do
 done
 
 # running experiments for real-world datasets
-for ratio in 1.0 0.5 0.25 0.125 0.0625 0.03125 0.015625
+for ratio in 0.99 0.5 0.25 0.125 0.0625 0.03125 0.015625
 do
     for seed in 1 2 3 4 5
     do

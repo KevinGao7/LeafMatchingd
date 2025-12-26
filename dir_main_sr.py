@@ -81,21 +81,21 @@ class CritiGraph(torch.nn.Module):
 
     def _p_flat(self, dis: Tensor, ig1: Tensor, ig2: Tensor) -> Tensor:
         """
-        扁平版本的 p，支持 dis 形状为 (E,L,tp) 或 (E,tp)。
-        ig1, ig2: 形状 (E,) 的新图索引（已是 0..N-1）。
-        返回: 与 dis 同形或可广播的概率张量。
+         p， dis  (E,L,tp)  (E,tp)。
+        ig1, ig2:  (E,) （ 0..N-1）。
+        :  dis 。
         """
         deg1 = self.out_degree[ig1]  # (E,)
         deg2 = self.in_degree[ig2]   # (E,)
         ap = (deg1 + 1) * (deg2 + 1) # (E,)
-        # 把 log(ap) reshape 成 (E,1,1) 以便对 (E,L,tp) 广播；如果 dis 是 (E,tp) 也能广播
+        
         denom = torch.log(ap.float()).view(-1, *([1] * (dis.dim() - 1)))
         aa = (dis + self.eps) / denom
         return 1.0 / (1.0 + (aa**self.gamma) / self.alpha)
 
     def _P_flat(self, dis: Tensor, ig1: Tensor, ig2: Tensor, key: str) -> Tensor:
         """
-        与原 P 完全等价的扁平版本：
+         P ：
         key='in'  -> p_21
         key='out' -> p_12
         key='neg' -> (1-p_12)*(1-p_21)
@@ -114,18 +114,18 @@ class CritiGraph(torch.nn.Module):
     @torch.no_grad()
     def neighbor_batch_fixed_csr(self, sta_ind: torch.Tensor, choosing_mask_b: torch.Tensor):
         """
-        基于三套 CSR（all/in/out）的纯张量邻居展开 + 20% 单邻抽样（对 choosing=False 的节点）
-        输入:
-        sta_ind         : (B,) int64，批内节点（0..N-1）
-        choosing_mask_b : (B,) bool，True=保留全部邻居，False=仅保留 1 条（若该类邻接存在）
-        依赖:
-        self.rowptr, self.col : tuple 长度 3，对应 (all, in, out)，均为 int64 1-D
-        其中 self.col[j] 的最后一个元素是 -1 哨兵，下游需用 col[:-1]
-        输出:
+         CSR（all/in/out） + 20% （ choosing=False ）
+        :
+        sta_ind         : (B,) int64，（0..N-1）
+        choosing_mask_b : (B,) bool，True=，False= 1 （）
+        :
+        self.rowptr, self.col : tuple  3， (all, in, out)， int64 1-D
+         self.col[j]  -1 ， col[:-1]
+        :
         (src_all, dst_all, cnt_all, src_in, dst_in, src_out, dst_out)
-        其中 src_* 是批内行号 [0..B-1]，可直接用于 index_add_。
+         src_*  [0..B-1]， index_add_。
         """
-        # ---------- 基本断言 ----------
+        
         assert sta_ind.dim() == 1 and sta_ind.dtype == torch.int64
         assert choosing_mask_b.dim() == 1 and choosing_mask_b.dtype == torch.bool
         B = sta_ind.numel()
@@ -136,7 +136,7 @@ class CritiGraph(torch.nn.Module):
         ro_all, ro_in, ro_out = self.rowptr
         co_all, co_in, co_out = self.col
 
-        # 形状/类型
+        
         for ro, co in [(ro_all, co_all), (ro_in, co_in), (ro_out, co_out)]:
             assert ro.dim() == 1 and ro.dtype == torch.int64
             assert co.dim() == 1 and co.dtype == torch.int64
@@ -147,23 +147,23 @@ class CritiGraph(torch.nn.Module):
         assert sta_ind.min().item() >= 0 and sta_ind.max().item() < N
         assert choosing_mask_b.numel() == B
 
-        # 去掉 col 最后一个哨兵 -1
+        
         co_all = co_all[:-1]
         co_in  = co_in[:-1]
         co_out = co_out[:-1]
 
-        # ---------- 一个小工具：从 CSR 展开扁平边，并按 choosing_mask_b 执行“单邻抽样” ----------
+        
         def expand_and_sample(ro, co):
             """
-            返回:
+            :
             src_flat, dst_flat, cnt_per_node_before_sample
-            其中 cnt_per_node_before_sample 是 (B,) 的每个批内节点该类邻接的条数（抽样前）
+             cnt_per_node_before_sample  (B,) （）
             """
             off  = ro[sta_ind]                         # (B,)
             deg  = ro[sta_ind + 1] - off               # (B,)
             valid = deg > 0                             # (B,)
 
-            # 扁平展开
+            
             if valid.any():
                 src = torch.repeat_interleave(torch.arange(B, device=device, dtype=torch.int64)[valid],
                                             deg[valid])                                  # (E,)
@@ -173,9 +173,9 @@ class CritiGraph(torch.nn.Module):
                 ofs  = torch.arange(lenv.sum().item(), device=device, dtype=torch.int64) - \
                     torch.repeat_interleave(head, lenv)                                   # (E,)
                 dst = co[base + ofs]                                                         # (E,)
-                # 统计每个批内节点的边数（抽样前）
+                
                 bc = torch.bincount(src, minlength=B)                                        # (B,)
-                # 对 choosing=False 的节点，仅保留 1 条
+                
                 if (~choosing_mask_b[src]).any():
                     keep_all = choosing_mask_b[src]                                          # (E,)
                     head_e = torch.cumsum(bc, 0) - bc                                        # (B,)
@@ -185,31 +185,31 @@ class CritiGraph(torch.nn.Module):
                     keep = keep_all | (idx_in_seg == pick[src])
                     src, dst = src[keep], dst[keep]
             else:
-                # 该类邻接在本批内为空
+                
                 src = torch.empty(0, dtype=torch.int64, device=device)
                 dst = torch.empty(0, dtype=torch.int64, device=device)
                 bc  = torch.zeros(B, dtype=torch.int64, device=device)
 
             return src, dst, bc
 
-        # in / out 展开与抽样
+        
         src_in,  dst_in,  cnt_in_before  = expand_and_sample(ro_in,  co_in)
         src_out, dst_out, cnt_out_before = expand_and_sample(ro_out, co_out)
 
-        # all 展开与抽样（注意：all 已经是 in ∪ out 的去重并集，你的构造保证这一点）
+        
         src_all, dst_all, cnt_all_before = expand_and_sample(ro_all, co_all)
 
-        # ---------- 计算 cnt_all（归一化分母）：抽样后计数 ----------
-        # 对 choosing=True 的节点：cnt_all = 抽样前计数；对 choosing=False 且该类存在：cnt_all = 1；否则 0
+        
+        
         cnt_all = torch.where(
             choosing_mask_b,
             cnt_all_before,
             (cnt_all_before > 0).to(torch.int64)
         )
-        # 分母保护，与原逻辑一致
+        
         cnt_all = cnt_all.clamp_min(1)
 
-        # ---------- 最小一致性断言 ----------
+        
         assert src_in.numel() == dst_in.numel()
         assert src_out.numel() == dst_out.numel()
         assert src_all.numel() == dst_all.numel()
@@ -221,7 +221,7 @@ class CritiGraph(torch.nn.Module):
 
 
 
-    # 在 CritiGraph 类内，替换 loom_v2 签名，并把 _neighbor_batch_flat 调用改为传入 choosing_mask_b
+    
     @torch.no_grad()
     def loom_v2(self, epoch: int, sta_ind: torch.Tensor, choosing_mask_b: torch.Tensor):
         device = sta_ind.device
@@ -239,7 +239,7 @@ class CritiGraph(torch.nn.Module):
         src_out, dst_out) = self.neighbor_batch_fixed_csr(sta_ind, choosing_mask_b)
 
 
-        # 负采样：与 all 对齐
+        
         E_all = src_all.numel()
         neg_dst_all = torch.randint(0, self.num_nodes, (E_all,), device=device, dtype=torch.long)
 
@@ -296,11 +296,11 @@ class CritiGraph(torch.nn.Module):
 
    
     def get_neighbor(self):
-        # 获取边
+        
         edges = torch.tensor(list(self.G.edges()), dtype=torch.long, device=device)
         src, dst = edges[:, 0], edges[:, 1]
 
-        # 构建邻接矩阵
+        
         idx_in  = torch.stack((dst, src), dim=0) # (2, E)
         idx_out = torch.stack((src, dst), dim=0) # (2, E)
         idx_all = torch.cat((idx_out, idx_in), dim=1) # (2, 2E)
@@ -315,11 +315,11 @@ class CritiGraph(torch.nn.Module):
             ).to(device).coalesce()
             return adj
 
-        self.adj = (get_sparse_adj(idx_all), get_sparse_adj(idx_in), get_sparse_adj(idx_out)) # (3, N, N), 稀疏
+        self.adj = (get_sparse_adj(idx_all), get_sparse_adj(idx_in), get_sparse_adj(idx_out)) 
 
-        # 获取 csr 索引：col 表示 0 ~ N-1 号节点的邻居排成一行，rowptr 表示每个节点的邻居起始位置，换句话说，对于节点 u, col[rowptr[u]:rowptr[u+1]] 就是 u 的所有邻居，或者 u 指出的边
+        
         def coo_to_csr(adj: torch.Tensor):
-            row, col = adj.indices() # 因为调用了 coalesce()，所以 row 和 col 都是有序的；也即，row 为第一关键字，col 为第二关键字，升序排列
+            row, col = adj.indices() 
             col = torch.cat((col, torch.tensor([-1], dtype=torch.int64, device=device)))
             counts = torch.bincount(row, minlength=adj.size(0)) # (N, )
             rowptr = torch.empty(self.num_nodes + 1, dtype=torch.int64, device=device)
@@ -332,26 +332,26 @@ class CritiGraph(torch.nn.Module):
     
     def edge_capped_node_batches(self, epoch: int, num_edges_cap: int, shuffle: bool = True):
         """
-        依照 num_edges_cap 生成一批批节点，使得每个 batch 的“有效边数”
-        E_batch := (all 有效边) + (in 有效边) + (out 有效边) <= num_edges_cap。
-        有效边定义与训练采样一致：在收敛前期，20% 节点每类邻居仅保留 1 条（若原本>0）。
-        产出: (sta_ind_b, choosing_mask_b)  二者均在 GPU 上。
+         num_edges_cap ， batch “”
+        E_batch := (all ) + (in ) + (out ) <= num_edges_cap。
+        ：，20%  1 （>0）。
+        : (sta_ind_b, choosing_mask_b)   GPU 。
         """
         device = self.out_degree.device
 
-        # 1) 本 epoch 的全局 choosing_mask（逐节点），与训练采样一致
+        
         if epoch <= self.convergence * self.epoch:
             choosing_mask_global = (torch.rand(self.num_nodes, device=device) > 0.2)
         else:
             choosing_mask_global = torch.ones(self.num_nodes, dtype=torch.bool, device=device)
 
-        # 只考虑度>0的节点（与训练一致）
+        
         nodes = self.li.clone()
         if shuffle:
             perm = torch.randperm(nodes.numel(), device=device)
             nodes = nodes[perm]
 
-        # 2) 计算每个候选节点在本 epoch 下的“有效边数”
+        
         deg_all = self.degree[nodes]
         deg_in  = self.in_degree[nodes]
         deg_out = self.out_degree[nodes]
@@ -360,14 +360,14 @@ class CritiGraph(torch.nn.Module):
         eff_all = torch.where(mask_b, deg_all, deg_all.clamp_max(1))
         eff_in  = torch.where(mask_b, deg_in,  deg_in.clamp_max(1))
         eff_out = torch.where(mask_b, deg_out, deg_out.clamp_max(1))
-        cost    = eff_all + eff_in + eff_out   # 每个节点的有效边数（与真正构边一致）
+        cost    = eff_all + eff_in + eff_out   
 
-        # 3) 顺序装箱，边数超过上限前切 batch
+        
         cur_nodes = []
         cur_mask  = []
         cur_edges = 0
 
-        # 注意：控制流放在 CPU 可降低 GPU 同步开销
+        
         cost_cpu = cost.detach().cpu().tolist()
         nodes_cpu = nodes.detach().cpu().tolist()
         mask_cpu  = mask_b.detach().cpu().tolist()
@@ -375,21 +375,21 @@ class CritiGraph(torch.nn.Module):
         for n_id, c, m in zip(nodes_cpu, cost_cpu, mask_cpu):
             c = int(c)
             if c == 0:
-                # 该节点虽在 li 中，但三类邻居在本 epoch 的采样后都为空（极少见），跳过
+                
                 continue
-            # 若当前非空且加入后超过上限，则先发出当前 batch
+            
             if len(cur_nodes) > 0 and (cur_edges + c) > num_edges_cap:
                 sta_ind_b = torch.tensor(cur_nodes, device=device, dtype=torch.long)
                 choosing_mask_b = torch.tensor(cur_mask, device=device, dtype=torch.bool)
                 yield sta_ind_b, choosing_mask_b
                 cur_nodes, cur_mask, cur_edges = [], [], 0
 
-            # 把当前节点放入 batch；若它本身 c > num_edges_cap，将成为“重节点”单批
+            
             cur_nodes.append(n_id)
             cur_mask.append(bool(m))
             cur_edges += c
 
-            # 如果单节点已超过上限，立即发出（避免死循环）
+            
             if cur_edges > num_edges_cap:
                 sta_ind_b = torch.tensor(cur_nodes, device=device, dtype=torch.long)
                 choosing_mask_b = torch.tensor(cur_mask, device=device, dtype=torch.bool)
@@ -448,21 +448,21 @@ class CritiGraph(torch.nn.Module):
             print("current_time:", datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3], "pos+neg, pos, neg")
             sys.stdout.flush()
 
-            # 将标量改为浮点累计
+            
             total_wsum = 0.0
             pos_wsum   = 0.0
             neg_wsum   = 0.0
-            node_count = 0   # 本 epoch 参与训练的“节点总数”（度>0）
+            node_count = 0   
             total_time = 0.0
 
-            # —— 按边数限额的分批 —— 
+            
             for sta_ind_b, choosing_mask_b in self.edge_capped_node_batches(epoch, self.batch_edge, shuffle=True):
                 # print("epoch", epoch, "processing batch with", sta_ind_b.numel(), "nodes")
                 st_time = datetime.now()
-                tl, pl, nl = self.loom_v2(epoch, sta_ind_b, choosing_mask_b)  # tl/pl/nl: 已是(按 b,t)平均的 batch 标量
+                tl, pl, nl = self.loom_v2(epoch, sta_ind_b, choosing_mask_b)  
                 B = sta_ind_b.numel()
 
-                # 按节点数加权累加
+                
                 total_wsum += tl.item() * B
                 pos_wsum   += pl.item() * B
                 neg_wsum   += nl.item() * B
@@ -472,7 +472,7 @@ class CritiGraph(torch.nn.Module):
 
             print("Finished training epoch:", epoch, "total time:", total_time)
 
-            # —— 用节点总数做归一化（恢复原始“按节点均值”的语义） ——
+            
             total    = total_wsum / max(1, node_count)
             positive = pos_wsum   / max(1, node_count)
             negative = neg_wsum   / max(1, node_count)
@@ -510,7 +510,7 @@ class CritiGraph(torch.nn.Module):
     def eval(self, test_pos, test_neg, epoch):
         pos = self.get_score(test_pos)
         neg = self.get_score(test_neg)
-        # 输出 10%, 20%, ..., 90%, 100% 的正 / 负样本分数分位点
+        
         # for p in np.arange(90, 100, 1):
         #     pos_perc = torch.quantile(pos, p / 100.0).item()
         #     neg_perc = torch.quantile(neg, p / 100.0).item()
